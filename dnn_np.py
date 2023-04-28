@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.utils import shuffle
 from util import *
 from activation_np import *
 from gradient_check import *
@@ -61,19 +62,19 @@ class Layer(object):
         :param x: input of the layer
         :param delta_dot_w_prev: delta^(l+1) dot product with w^(l+1)T, computed from the next layer (in feedforward direction) or previous layer (in backpropagation direction)
         """
-
         # [TODO 1.2]
         if(self.activation == 'sigmoid'):
             delta = delta_dot_w_prev*sigmoid_grad(self.output)
             w_grad = x.T@delta
-        
+
         elif(self.activation == 'tanh'):
-           delta = delta_dot_w_prev*tanh_grad(self.output)
-           w_grad = x.T@delta
+            delta = delta_dot_w_prev*tanh_grad(self.output)
+            w_grad = x.T@delta
 
         elif(self.activation == 'relu'):
-           delta = delta_dot_w_prev*reLU_grad(self.output)
-           w_grad = x.T@delta
+            delta = delta_dot_w_prev*reLU_grad(self.output)
+            w_grad = x.T@delta
+
         # [TODO 1.4] Implement L2 regularization on weights here
         w_grad +=  self.reg*self.w
         return w_grad, delta.copy()
@@ -129,10 +130,11 @@ class NeuralNet(object):
 
         # [TODO 1.3]
         # Estimating cross entropy loss from y_hat and y 
-        data_loss = - np.mean(np.log(np.sum(y*y_hat, axis = 1)))
+        data_loss = -np.mean(np.sum(y*np.log(y_hat), axis = 1))
 
         # Estimating regularization loss from all layers
-        reg_loss = 0.5*self.reg*(sum([np.sqrt(np.sum(layer.w**2)) for layer in self.layers]))
+        # reg_loss = 0
+        reg_loss = 0.5*self.reg*(sum([np.sum(layer.w**2) for layer in self.layers]))
         data_loss += reg_loss
 
         return data_loss
@@ -140,7 +142,7 @@ class NeuralNet(object):
     def backward(self, y, all_x):
         """backward
 
-        :param y: the label, the actual class of the samples. e.g. 3-class classification with 9 data samples y = [0 0 0 1 1 1 2 2 2]
+        :param y: the label, the actual class of th esamples. e.g. 3-class classification with 9 data samples y = [0 0 0 1 1 1 2 2 2]
         :param all_x: input data and activation from every layer
         """
         
@@ -262,21 +264,24 @@ def minibatch_train(net, train_x, train_y, cfg):
     train_set_x = train_x[:cfg.num_train].copy()
     train_set_y = train_y[:cfg.num_train].copy()
     train_set_y = create_one_hot(train_set_y, net.num_class)
-    all_loss = []
-    n_batches = int(np.ceil(cfg.num_train/cfg.batch_size))
+    num_batches = int(cfg.num_train/cfg.batch_size)
 
-    for e in range(cfg.num_epoch):
-        mix_ids = np.random.permutation(cfg.num_train)
-        for i in range(n_batches):
-            batch_ids = mix_ids[cfg.batch_size*i:min(cfg.batch_size*(i + 1), cfg.num_train)]
-            train_x_batch, train_y_batch = train_set_x[batch_ids], train_set_y[batch_ids]
-            all_x = net.forward(train_x_batch)
+    all_loss = []
+
+    for epoch in range(cfg.num_epoch):
+        train_set_x, train_set_y = shuffle(train_set_x, train_set_y)
+        for i in range(num_batches):
+            batch_x = train_set_x[i*(cfg.batch_size):min((i + 1)*cfg.batch_size - 1, cfg.num_train)]
+            batch_y = train_set_y[i*(cfg.batch_size):min((i + 1)*cfg.batch_size - 1, cfg.num_train)]
+
+            all_x = net.forward(batch_x)
             y_hat = all_x[-1]
-            loss = net.compute_loss(train_y_batch, y_hat)
-            grads = net.backward(train_y_batch, all_x)
+            loss = net.compute_loss(batch_y, y_hat)
+            grads = net.backward(batch_y, all_x)
             net.update_weight(grads, cfg.learning_rate)
             all_loss.append(loss)
-        if (e % cfg.epochs_to_draw == cfg.epochs_to_draw-1):
+
+        if (epoch % cfg.epochs_to_draw == cfg.epochs_to_draw-1):
             if (cfg.visualize):
                 y_hat = net.forward(train_x[0::3])[-1]
                 visualize_point(train_x[0::3], train_y[0::3], y_hat)
@@ -284,9 +289,10 @@ def minibatch_train(net, train_x, train_y, cfg):
             plt.show()
             plt.pause(0.01)
 
-        print("Epoch %d: loss is %.5f" % (e+1, loss))
+            print("Epoch %d: loss is %.5f" % (epoch+1, loss))
 
-
+    # pass
+    
 def batch_train(net, train_x, train_y, cfg):
     """batch_train
     Train the neural network using batch SGD
